@@ -1,12 +1,12 @@
 CC = gcc
-CFlags = -Wall -c
-LDFLAGS =
+CFlags = -Wall -c -pthread
+LDFLAGS = -pthread
 EXEC = main
 
-all: $(main)
+all: $(EXEC)
 
 main : main.o controle.o
-	$(CC) $^ -o $a $(LDFLAGS)
+	$(CC) $^ -o $@ $(LDFLAGS)
 
 main.o : main.c
 	$(CC) $< -o $@ $(CFlags)
