@@ -8,67 +8,22 @@
 #include <sys/sem.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
+#include <sys/msg.h>
 
 #include "controll.h"
 #include "plane.h"
-
-#define IFLAGS (SEMPERM | IPC_CREAT)
-#define SKEY   (key_t) IPC_PRIVATE	
-#define SEMPERM 0600
-
-#define FlightInformation 0
-#define MutexNbPlaneAwaitingInformation 1
+#include "msgstructs.h"
+#include "semaphore.h"
 
 int exitrequested;
-int sem_id ;
+int msgid;
+
 char* FranceDestinations[20] = {"Paris - Charles de Gaulle","Paris - Orly","Nice - Côte d’Azur","Lyon - Saint Exupéry","Marseille - Provence","Toulouse - Blagnac","Bâle - Mulhouse - Fribourg","Bordeaux - Mérignac","Nantes - Atlantique","Paris - Beauvais-Tillé","Guadeloupe - Pôle Caraïbes", "La Réunion - R. Garros","Lille - Lesquin","Martinique - A. Césaire","Montpellier - Méditerranée","Ajaccio - Napoléon-Bonaparte","Bastia - Poretta","Tahiti - Faaa","Strasbourg","Brest - Bretagne"};
 char* EuropeDestinations[10] = {"Londres - Heathrow","Amsterdam - Schiphol","Francfort - Rhin/Main","Madrid/Barajas - Adolfo-Suárez","Barcelone - El Prat","Istanbul","Moscou - Cheremetievo","Munich - Franz-Josef-Strauß","Londres - Gatwick","Rome Fiumicino - Léonard-de-Vinci"};
 int NbPlaneAwaitingInformation;
-struct sembuf sem_oper_P ;
-struct sembuf sem_oper_V ;
 
-void P(int semnum) {
-
-sem_oper_P.sem_num = semnum;
-sem_oper_P.sem_op  = -1 ;
-sem_oper_P.sem_flg = 0 ;
-semop(sem_id,&sem_oper_P,1);
-}
-
-void V(int semnum) {
-
-sem_oper_V.sem_num = semnum;
-sem_oper_V.sem_op  = 1 ;
-sem_oper_V.sem_flg  = 0 ;
-semop(sem_id,&sem_oper_V,1);
-}
-
-int initsem(key_t semkey) 
-{
-    
-	int status = 0;		
-	int semid_init;
-   	union semun {
-		int val;
-		struct semid_ds *stat;
-		short * array;
-	} ctl_arg;
-    if ((semid_init = semget(semkey, 2, IFLAGS)) > 0) {
-		
-	    	short array[2] = {0,1};
-	    	ctl_arg.array = array;
-	    	status = semctl(semid_init, 0, SETALL, ctl_arg);
-    }
-   if (semid_init == -1 || status == -1) { 
-	perror("Erreur initsem");
-	return (-1);
-    } else return (semid_init);
-}
-
-int liberesem()
-{
-	return semctl(sem_id, 0, IPC_RMID,0);
-}
+FlightInformation FlightInformationMsg;
 
 void traitantSIGINT(int num) {
 
@@ -80,14 +35,6 @@ void traitantSIGINT(int num) {
 
 void attenterandom(int n) {
    sleep(rand() % n);
-}
-
-void controll ()
-{
-	while (exitrequested!= 0)
-	{
-		V(FlightInformation);
-	}
 }
 
 void * plane (void * arg)
@@ -111,10 +58,19 @@ void * plane (void * arg)
 	if(NbPlaneAwaitingInformation > 1)
 	{
 		V(MutexNbPlaneAwaitingInformation);
-		P(FlightInformation);
+		P(WaitFlightInformation);
 	}
 	else
 		V(MutexNbPlaneAwaitingInformation);
+	//Reception Message Informations de vol
+
+	NbPlaneAwaitingInformation--;
+	if ((msgrcv(msgid, &FlightInformationMsg, sizeof(FlightInformation) - sizeof(long), 1, 0)) == -1) 
+	{
+	    perror("Erreur de lecture msg\n");
+	    pthread_exit((void *) 1);
+	}
+	printf("Départ voie %d et délai max %d\n",FlightInformationMsg.tracknumber,FlightInformationMsg.maxdelay);
 	
 	free(destination);
 	pthread_exit(NULL);
@@ -138,6 +94,14 @@ int main(int argc, char *argv[]) {
 	//Initialisation sémaphores
     if ((sem_id = initsem(SKEY)) < 0)
 		return(1);
+
+	//Initialisation file de message
+	if ((msgid = msgget(SKEY, IFLAGS)) == -1) 
+	{
+		perror("Erreur de creation de la file\n");
+		return(1);
+    }
+
 
 	pid_t pid;
 	pid = fork();
