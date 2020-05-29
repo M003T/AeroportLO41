@@ -1,12 +1,17 @@
 #ifndef CONTROLL_H
 #define CONTROLL_H
 
-#include "msgstructs.h"
+extern SharedMemoryStruct *SharedMemory;
 
-extern int msgid;
-extern int exitrequested;
-extern FlightInformation FlightInformationMsg;
+PlaneInformationStruct PlaneInformation;
+FlightInformationStruct FlightInformation;
+
 
 void controll();
+void receivePlaneInformation ();
+void printPlaneInformation ();
+void generateFlightInformation ();
+void sendFlightInformation ();
+void printFlightInformation ();
 
 #endif

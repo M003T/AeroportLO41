@@ -1,17 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <sys/ipc.h>
-#include <pthread.h>
+#include <stdio.h>
 #include <sys/sem.h>
 #include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <sys/msg.h>
+#include <stdlib.h>
 
 #include "semaphore.h"
+#include "ipc.h"
 
 int sem_id ;
 
@@ -31,29 +26,31 @@ sem_oper_V.sem_flg  = 0 ;
 semop(sem_id,&sem_oper_V,1);
 }
 
-int initsem(key_t semkey) 
+void initsem() 
 {
     
-	int status = 0;		
-	int semid_init;
+	int status = 0;
    	union semun {
 		int val;
 		struct semid_ds *stat;
 		short * array;
 	} ctl_arg;
-    if ((semid_init = semget(semkey, 2, IFLAGS)) > 0) {
-		
+    if ((sem_id = semget(KEY, 2, IFLAGS)) > 0) {
 	    	short array[2] = {0,1};
 	    	ctl_arg.array = array;
-	    	status = semctl(semid_init, 0, SETALL, ctl_arg);
+	    	status = semctl(sem_id, 0, SETALL, ctl_arg);
     }
-   if (semid_init == -1 || status == -1) { 
-	perror("Erreur initsem");
-	return (-1);
-    } else return (semid_init);
+	if (sem_id == -1 || status == -1) {
+		perror("Erreur initsem");
+		//exit(EXIT_FAILURE);
+    }
 }
 
-int liberesem()
+void deletesem()
 {
-	return semctl(sem_id, 0, IPC_RMID,0);
+	if (semctl(sem_id, 0, IPC_RMID,0) < 0)
+	{
+		perror("Erreur fermeture sémaphore");
+		//exit(EXIT_FAILURE);
+	}
 }

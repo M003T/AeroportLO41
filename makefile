@@ -5,20 +5,26 @@ EXEC = main
 
 all: $(EXEC)
 
-main : main.o controll.o semaphore.o plane.o
+main : main.o controll.o plane.o semaphore.o sharedmemory.o messagefile.o
 	$(CC) $^ -o $@ $(LDFLAGS)
 
-main.o : main.c controll.h msgstructs.h  plane.h semaphore.h
+main.o : main.c controll.h plane.h semaphore.h messagefile.h sharedmemory.h
 	$(CC) $< -o $@ $(CFlags)
 
-semaphore.o : semaphore.c semaphore.h
+controll.o : controll.c controll.h semaphore.h sharedmemory.h
 	$(CC) $< -o $@ $(CFlags)
 
-controll.o : controll.c controll.h semaphore.h
+plane.o : plane.c plane.h semaphore.h
 	$(CC) $< -o $@ $(CFlags)
 
-plane.o : plane.c plane.h
+semaphore.o : semaphore.c semaphore.h ipc.h
 	$(CC) $< -o $@ $(CFlags)
 
-debug:
+sharedmemory.o : sharedmemory.c sharedmemory.h ipc.h
+	$(CC) $< -o $@ $(CFlags)
+
+messagefile.o : messagefile.c messagefile.h ipc.h
+	$(CC) $< -o $@ $(CFlags)
+
+debug :
 	gdb -ex=r --args main 10 

@@ -1,9 +1,7 @@
 #ifndef SEMAPHORE_H
 #define SEMAPHORE_H
 
-#define IFLAGS (SEMPERM | IPC_CREAT)
-#define SKEY   (key_t) IPC_PRIVATE
-#define SEMPERM 0600
+#include <sys/sem.h>
 
 #define WaitFlightInformation 0
 #define MutexNbPlaneAwaitingInformation 1
@@ -17,8 +15,8 @@ void P(int );
 
 void V(int );
 
-int initsem(key_t );
+void initsem();
 
-int liberesem();
+void deletesem();
 
 #endif
