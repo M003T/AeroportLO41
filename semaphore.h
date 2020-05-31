@@ -4,7 +4,11 @@
 #include <sys/sem.h>
 
 #define WaitFlightInformation 0
-#define MutexNbPlaneAwaitingInformation 1
+#define WaitTrack1 1
+#define WaitTrack2 2
+#define MutexNbPlaneAwaitingInformation 3
+#define MutexTrack1 4
+#define MutexTrack2 5
 
 struct sembuf sem_oper_P ;
 struct sembuf sem_oper_V ;

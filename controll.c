@@ -5,6 +5,7 @@
 #include <time.h>
 #include <sys/msg.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "sharedmemory.h"
 #include "messagefile.h"
@@ -16,29 +17,33 @@ FlightInformationStruct FlightInformation;
 
 void controll ()
 {
-	//Sémaphore Mutex d'accès à NbPlaneAwaitingInformation dans la boucle while
+	//Sémaphores Mutex d'accès aux variables monitrice afin que le programme ne s'arrête pas tant que des avions sont encore présent
 	P(MutexNbPlaneAwaitingInformation);
-	while ((SharedMemory->exitrequested == 0) || (SharedMemory->NbPlaneAwaitingInformation > 0))
+	P(MutexTrack1);
+	P(MutexTrack2);
+	while ((SharedMemory->exitrequested == 0) || (SharedMemory->NbPlaneAwaitingInformation > 0) || (SharedMemory->NbPlaneAwaitingTrack1 > 0) || (SharedMemory->NbPlaneAwaitingTrack2 > 0) || (SharedMemory->Track1Used == 1) || (SharedMemory->Track2Used == 1))
 	{	
 		V(MutexNbPlaneAwaitingInformation);
+		V(MutexTrack1);
+		V(MutexTrack2);
 
-		P(MutexNbPlaneAwaitingInformation);
-		if(SharedMemory->NbPlaneAwaitingInformation > 0)
-		{
-			V(MutexNbPlaneAwaitingInformation);
-			V(WaitFlightInformation);
-			receivePlaneInformation();
-			printPlaneInformation();
-			generateFlightInformation();
-			printFlightInformation();
-			sendFlightInformation();
-		}
-		else
-			V(MutexNbPlaneAwaitingInformation);
+		//Si avions attendent information alors on leur envoie
+		testPlaneAwaitingInformation();
 
+		//Si avions attendent sur la piste 1 alors on les déverouille
+		testTrack1();
+		
+		//Si avions attendent sur la piste 2 alors on les déverouille
+		testTrack2();
+		
+		//Réactivation de ces mêmes Mutex à la fin de la boucle while afin que leur consultation pour l'itération suivante du while soit protégée
 		P(MutexNbPlaneAwaitingInformation);
+		P(MutexTrack1);
+		P(MutexTrack2);
 	}
 	V(MutexNbPlaneAwaitingInformation);
+	V(MutexTrack1);
+	V(MutexTrack2);
 }
 
 void receivePlaneInformation ()
@@ -75,9 +80,19 @@ void generateFlightInformation ()
 	FlightInformation.type = 2;
 
 	if (PlaneInformation.size == 1)
-		FlightInformation.tracknumber = (rand()%2)+1; // A changer ??
+	{
+		P(MutexTrack1);
+		P(MutexTrack2);
+		//Si la petite piste est en surcharge par rapport à la grande, les avions petit calibre décollent sur la grande
+		if(SharedMemory->NbPlaneAwaitingTrack1 <= (SharedMemory->NbPlaneAwaitingTrack2 - 3))
+			FlightInformation.tracknumber = 1;
+		else
+			FlightInformation.tracknumber = 2;
+		V(MutexTrack1);
+		V(MutexTrack2);
+	}
 	else
-		FlightInformation.tracknumber = 2;
+		FlightInformation.tracknumber = 1;
 
 	if (FlightInformation.tracknumber == 1)
 	{
@@ -89,10 +104,20 @@ void generateFlightInformation ()
 		strcpy(FlightInformation.routebrief,"A droite vers la petite piste");
 		strcpy(FlightInformation.trackbrief,"Sortir vers les pistes");
 	}
-	time_t mytime;
-	mytime = time(NULL);
-	FlightInformation.liftoffhour = *localtime( &mytime );
-	FlightInformation.maxdelay = rand()%30;
+	//Création de l'heure de départ : l'heure actuelle + de 0 à 2 min ajoutées, si le champ des minutes dépasse 60 alors on augmente d'1h et on enlève 60 min
+	time_t mytime = time(NULL);
+	FlightInformation.takeofforlandinghour = *localtime( &mytime );
+	int minutestoadd = (rand()%3);
+	if ( (FlightInformation.takeofforlandinghour.tm_min + minutestoadd) >=60 )
+	{
+		FlightInformation.takeofforlandinghour.tm_hour++;
+		FlightInformation.takeofforlandinghour.tm_min = FlightInformation.takeofforlandinghour.tm_min + minutestoadd - 60;
+	}
+	else
+	{
+		FlightInformation.takeofforlandinghour.tm_min = FlightInformation.takeofforlandinghour.tm_min + minutestoadd;
+	}
+	FlightInformation.maxdelay = (rand()%3)+1;
 }
 
 void sendFlightInformation ()
@@ -115,8 +140,52 @@ void printFlightInformation()
 {
 	printf("Avion n°%d : ",PlaneInformation.num);
 	if (PlaneInformation.fromorto == 1)
-		printf("arrivée piste %d",FlightInformation.tracknumber);
+		printf("arrivée prévue piste %d",FlightInformation.tracknumber);
 	else
-		printf("départ piste %d",FlightInformation.tracknumber);
-	printf(" à %d:%d, délai max %d min\n",FlightInformation.liftoffhour.tm_hour,FlightInformation.liftoffhour.tm_min,FlightInformation.maxdelay);
+		printf("départ prévu piste %d",FlightInformation.tracknumber);
+	printf(" à %d:%d, délai max %d min\n",FlightInformation.takeofforlandinghour.tm_hour,FlightInformation.takeofforlandinghour.tm_min,FlightInformation.maxdelay);
+}
+
+void testPlaneAwaitingInformation()
+{
+	P(MutexNbPlaneAwaitingInformation);
+	if(SharedMemory->NbPlaneAwaitingInformation > 0)
+	{
+		V(MutexNbPlaneAwaitingInformation);
+		V(WaitFlightInformation);
+		receivePlaneInformation();
+		printPlaneInformation();
+		generateFlightInformation();
+		printFlightInformation();
+		sendFlightInformation();
+	}
+	else
+		V(MutexNbPlaneAwaitingInformation);
+}
+
+void testTrack1()
+{
+	P(MutexTrack1);
+	if(SharedMemory->NbPlaneAwaitingTrack1 > 0 && SharedMemory->Track1Used == 0 )
+	{
+		V(MutexTrack1);
+		V(WaitTrack1);
+		//Sleep nécessaire pour éviter que la tour de contrôle ait le temps de faire un tour de boucle complet et déverouiller un 2ème avion avant que ce dernier ait le temps de décoller
+		sleep(1);
+	}
+	else
+		V(MutexTrack1);
+}
+
+void testTrack2()
+{
+	P(MutexTrack2);
+	if(SharedMemory->NbPlaneAwaitingTrack2 > 0 && SharedMemory->Track2Used == 0 )
+	{
+		V(MutexTrack2);
+		V(WaitTrack2);
+		sleep(1);
+	}
+	else
+		V(MutexTrack2);
 }

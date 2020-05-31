@@ -19,7 +19,7 @@ typedef struct {
 	int tracknumber;
 	char routebrief [50];
 	char trackbrief [50];
-	struct tm liftoffhour;
+	struct tm takeofforlandinghour;
 	int maxdelay;
 }	FlightInformationStruct;
 

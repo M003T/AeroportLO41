@@ -13,5 +13,8 @@ void printPlaneInformation ();
 void generateFlightInformation ();
 void sendFlightInformation ();
 void printFlightInformation ();
+void testPlaneAwaitingInformation();
+void testTrack1();
+void testTrack2();
 
 #endif

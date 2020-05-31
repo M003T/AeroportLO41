@@ -19,6 +19,8 @@ char* EuropeDestinations[10] = {"Londres - Heathrow","Amsterdam - Schiphol","Fra
 
 SharedMemoryStruct *SharedMemory;
 
+pid_t pid;
+
 void traitantSIGINT(int num) 
 {
 	if (num!=SIGINT)
@@ -32,8 +34,21 @@ void traitantSIGINT(int num)
 	}
 }
 
-void attenterandom(int n) {
-	sleep(rand() % n);
+void traitantSIGQUIT(int num) 
+{
+	if (num!=SIGQUIT)
+	{
+		perror("Erreur signal SigQuit");
+		//exit(EXIT_FAILURE);
+	}
+	else
+	{
+		deletesem();
+		deleteshm();
+		deletemsgfile();
+		kill(pid, SIGKILL);
+		exit(0);
+	}
 }
 
 int main(int argc, char *argv[]) 
@@ -57,12 +72,19 @@ int main(int argc, char *argv[])
 	SharedMemory = (SharedMemoryStruct*) getshm(SharedMemory);
 	SharedMemory->exitrequested = 0;
 	SharedMemory->NbPlaneAwaitingInformation = 0;
+	SharedMemory->NbPlaneAwaitingTrack1 = 0;
+	SharedMemory->NbPlaneAwaitingTrack2 = 0;
+	SharedMemory->Track1Used = 0;
+	SharedMemory->Track2Used = 0;
 
-	//Réecriture signal Ctrl-C pour que les objets IPC soient correctement supprimés en cas d'arrêt prématuré
+	//Réecriture signal Ctrl-C pour que les objets IPC soient correctement supprimés en cas d'arrêt prématuré, en laissant le programme se terminer normalement sans rajouter de nouveaux avions
 	signal(SIGINT,traitantSIGINT);
 
+	//Réecriture signal Ctrl-\ pour que les objets IPC soient correctement supprimés en cas d'arrêt prématuré, en fermant le programme instantanément
+	signal(SIGQUIT,traitantSIGQUIT);
+
+
     //Création processus fils (tour de contrôle)
-    pid_t pid;
 	pid = fork();
 	if (pid == 0)
 	{
@@ -85,7 +107,7 @@ int main(int argc, char *argv[])
 				perror("Erreur Creation Thread");
 				//return(-1);
 			}
-    		attenterandom(5);
+    		sleep((rand()%5)+3);
     		i++;
 		}
 		

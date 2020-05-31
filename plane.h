@@ -6,12 +6,11 @@ extern char* EuropeDestinations[10];
 
 extern SharedMemoryStruct *SharedMemory;
 
-FlightInformationStruct FlightInformation;
-PlaneInformationStruct PlaneInformation;
-
 void sendPlaneInformation();
 void initPlaneInformation();
 void receiveFlightInformation();
 void * plane (void *);
+void takeOffOrLanding();
+void testtimetogo();
 
 #endif

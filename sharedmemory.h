@@ -6,6 +6,10 @@
 typedef struct {
 	bool exitrequested;
 	int NbPlaneAwaitingInformation;
+	int NbPlaneAwaitingTrack1;
+	int NbPlaneAwaitingTrack2;
+	bool Track1Used;
+	bool Track2Used;
 }	SharedMemoryStruct;
 
 extern int shm_id;
