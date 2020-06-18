@@ -13,7 +13,7 @@
 
 #define PlaneLoseFuelDelay 10 //Default 10
 
-#define ControllBarrierOdds 30 //Default 30
+#define ControllBarrierOdds 25 //Default 25
 #define ControllBarrierDelay 20 //Default 20, has randompart
 
 #define ControllBarrierDelayReduceWhenInsuredPlane 10 //Default 10, means when Planes become assured, if there is Barrier then its delay is reduced by 10

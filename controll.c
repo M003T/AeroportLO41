@@ -41,14 +41,15 @@ void controll ()
 		//Si avions attendent information alors on leur envoie
 		testPlaneAwaitingInformation();
 
+		//Obstacle aléatoire sur les 2 pistes ?
+		randomBarrier(1);
+		randomBarrier(2);
+
 		//Si avions attendent sur la piste 1 alors on les déverouille
 		testTrack1();
 		
 		//Si avions attendent sur la piste 2 alors on les déverouille
 		testTrack2();
-
-		randomBarrier(1);
-		randomBarrier(2);
 
 		sleep(1);
 		//Sleep nécessaire pour éviter que la tour de contrôle ait le temps de faire un tour de boucle complet et déverouiller un 2ème avion avant que ce dernier ait le temps de décoller, ainsi que pour éviter la création de trop nombreux obstacles
@@ -271,7 +272,7 @@ void randomBarrier(int tracknumber)
 				printf("Tour de contrôle : Piste 1 : Obstacle inconnu\n");
 			}
 		}
-		else
+		else if (barrier1count > 0)
 		//Si il y'a déjà un obstacle, on diminue son compteur et si ce dernier atteint 0, la piste est libérée
 		{
 			barrier1count--;
@@ -300,7 +301,7 @@ void randomBarrier(int tracknumber)
 				printf("Tour de contrôle : Piste 2 : Obstacle inconnu\n");
 			}
 		}
-		else
+		else if (barrier2count > 0)
 		{
 			barrier2count--;
 			if(barrier2count == 0)

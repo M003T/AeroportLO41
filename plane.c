@@ -158,7 +158,9 @@ void takeOffOrLanding()
 		{
 			SharedMemory->NbPlaneAwaitingTrack1++;
 			V(MutexTrack1);
+
 			P(WaitTrack1);
+			
 			//Obligé de changer ces 2 variables durant la même utilisation de mutex car sinon la tour de contrôle avait le temps de faire 2 tours de boucle et déverouiller plusieurs fois la même
 			P(MutexTrack1);
 			SharedMemory->NbPlaneAwaitingTrack1--;
@@ -187,7 +189,9 @@ void takeOffOrLanding()
 		{
 			SharedMemory->NbPlaneAwaitingTrack2++;
 			V(MutexTrack2);
+
 			P(WaitTrack2);
+
 			//Changement des 2 variables durant la même utilisation de mutex pour éviter tout problème
 			P(MutexTrack2);
 			SharedMemory->NbPlaneAwaitingTrack2--;
