@@ -9,6 +9,10 @@
 #define MutexNbPlaneAwaitingInformation 3
 #define MutexTrack1 4
 #define MutexTrack2 5
+#define MutexPlanesWaiting 6
+#define MutexBarrier1 7
+#define MutexBarrier2 8
+#define MutexPlaneSignal 9
 
 struct sembuf sem_oper_P ;
 struct sembuf sem_oper_V ;

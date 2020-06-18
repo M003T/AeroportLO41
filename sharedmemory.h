@@ -8,8 +8,10 @@ typedef struct {
 	int NbPlaneAwaitingInformation;
 	int NbPlaneAwaitingTrack1;
 	int NbPlaneAwaitingTrack2;
+	int PlanesWaiting;
 	bool Track1Used;
 	bool Track2Used;
+	int TrackNumberPlaneThatSentSignal;
 }	SharedMemoryStruct;
 
 extern int shm_id;

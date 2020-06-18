@@ -11,6 +11,7 @@ typedef struct {
 	bool fromorto;
 	int size;
 	int num;
+	int fuellvl;
 }	PlaneInformationStruct;
 
 //structure message infos de la tour de contrôle
@@ -21,6 +22,7 @@ typedef struct {
 	char trackbrief [50];
 	struct tm takeofforlandinghour;
 	int maxdelay;
+	int operatingmode;
 }	FlightInformationStruct;
 
 extern int msg_id;

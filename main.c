@@ -7,12 +7,15 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <signal.h>
 
 #include "sharedmemory.h"
 #include "messagefile.h"
 #include "controll.h"
 #include "plane.h"
 #include "semaphore.h"
+#include "constants.h"
+#include "randompart.h"
 
 char* FranceDestinations[20] = {"Paris - Charles de Gaulle","Paris - Orly","Nice - Côte d’Azur","Lyon - Saint Exupéry","Marseille - Provence","Toulouse - Blagnac","Bâle - Mulhouse - Fribourg","Bordeaux - Mérignac","Nantes - Atlantique","Paris - Beauvais-Tillé","Guadeloupe - Pôle Caraïbes", "La Réunion - R. Garros","Lille - Lesquin","Martinique - A. Césaire","Montpellier - Méditerranée","Ajaccio - Napoléon-Bonaparte","Bastia - Poretta","Tahiti - Faaa","Strasbourg","Brest - Bretagne"};
 char* EuropeDestinations[10] = {"Londres - Heathrow","Amsterdam - Schiphol","Francfort - Rhin/Main","Madrid/Barajas - Adolfo-Suárez","Barcelone - El Prat","Istanbul","Moscou - Cheremetievo","Munich - Franz-Josef-Strauß","Londres - Gatwick","Rome Fiumicino - Léonard-de-Vinci"};
@@ -76,6 +79,8 @@ int main(int argc, char *argv[])
 	SharedMemory->NbPlaneAwaitingTrack2 = 0;
 	SharedMemory->Track1Used = 0;
 	SharedMemory->Track2Used = 0;
+	SharedMemory->PlanesWaiting = 0;
+	SharedMemory->TrackNumberPlaneThatSentSignal = 0;
 
 	//Réecriture signal Ctrl-C pour que les objets IPC soient correctement supprimés en cas d'arrêt prématuré, en laissant le programme se terminer normalement sans rajouter de nouveaux avions
 	signal(SIGINT,traitantSIGINT);
@@ -107,15 +112,15 @@ int main(int argc, char *argv[])
 				perror("Erreur Creation Thread");
 				//return(-1);
 			}
-    		sleep((rand()%5)+3);
+    		sleep(randompart(PlaneCreateNewDelay));
     		i++;
 		}
 		
-		//Fermeture Threads, Processus fils et Objets IPC et détachement mémoire partagée
-		SharedMemory->exitrequested = 1;
-		int j;
-		for (j=0;j<i;j++)
+		//Fermeture Threads, puis processus fils et enfin détachement mémoire partagée et suppression objets IPC 
+		for (int j=0;j<i;j++)
 			pthread_join(thr[j],NULL);
+
+		SharedMemory->exitrequested = 1;
 		int status;
 		waitpid(pid,&status,0);
 		if (status != 0)

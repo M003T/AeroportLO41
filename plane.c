@@ -8,11 +8,15 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include "semaphore.h"
 #include "sharedmemory.h"
 #include "messagefile.h"
 #include "plane.h"
+#include "constants.h"
+#include "randompart.h"
 
 //Mot clé __thread nécessaire pour créer une variable globale unique à chaque thread
 __thread FlightInformationStruct LocalFlightInformation;
@@ -60,12 +64,14 @@ void initPlaneInformation()
 	else
 		strcpy(LocalPlaneInformation.destination,EuropeDestinations[destinationnumber-20]);
 
-	if (rand()%4 != 0)
-		LocalPlaneInformation.fromorto = 0;
-	else
-		LocalPlaneInformation.fromorto = 1;
+	LocalPlaneInformation.fromorto = rand()%2;
 
-	LocalPlaneInformation.size = (rand()%2)+1;
+	if (rand()%PlaneGenerateBigOdds == 0)
+		LocalPlaneInformation.size = 2;
+	else
+		LocalPlaneInformation.size = 1;
+
+	LocalPlaneInformation.fuellvl = (rand()%PlaneFuelLvlRange)+1;
 }
 
 void sendPlaneInformation()
@@ -102,15 +108,24 @@ void receiveFlightInformation()
 
 void testtimetogo()
 {
+	P(MutexPlanesWaiting);
+	SharedMemory->PlanesWaiting++;
+	V(MutexPlanesWaiting);
+
 	time_t timestruct = time(NULL);
 	struct tm actualtime = *localtime( &timestruct );
-	//Tant que l'heure actuelle est différent de l'heure de décollage où que l'heure actuelle est inférieure à l'heure de décollage on attend
-	while( (LocalFlightInformation.takeofforlandinghour.tm_hour != actualtime.tm_hour) || (actualtime.tm_min < LocalFlightInformation.takeofforlandinghour.tm_min) )
+	//Tant que l'heure actuelle est différent de l'heure de décollage, ou que la minute actuelle est inférieure à la minute de décollage, ou que le mode de l'avion reste normal ou assuré, on attend, et le carburant diminue durant l'attente
+	while( ((LocalFlightInformation.takeofforlandinghour.tm_hour != actualtime.tm_hour) || (actualtime.tm_min < LocalFlightInformation.takeofforlandinghour.tm_min)) && LocalFlightInformation.operatingmode < 2 )
 	{
-		sleep(10);
+		sleep(PlaneLoseFuelDelay);
 		timestruct = time(NULL);
 		actualtime = *localtime( &timestruct );
+		LocalPlaneInformation.fuellvl--;
 	}
+	
+	P(MutexPlanesWaiting);
+	SharedMemory->PlanesWaiting--;
+	V(MutexPlanesWaiting);
 }
 
 void takeOffOrLanding()
@@ -135,11 +150,11 @@ void takeOffOrLanding()
 		V(MutexTrack1);
 
 		if (LocalPlaneInformation.fromorto == 1)
-			printf("Avion n°%d : atterissage piste 1\n",LocalPlaneInformation.num);
+			printf("Avion n°%d : Piste 1 : atterissage\n",LocalPlaneInformation.num);
 		else
-			printf("Avion n°%d : décollage piste 1\n",LocalPlaneInformation.num);
-		sleep((rand()%5)+5);
-		printf("Avion n°%d a libéré la piste 1\n",LocalPlaneInformation.num);
+			printf("Avion n°%d : Piste 1 : décollage\n",LocalPlaneInformation.num);
+		sleep(randompart(PlaneTakeOfOrLandingDelay));
+		printf("Avion n°%d : Piste 1 : libérée\n",LocalPlaneInformation.num);
 		P(MutexTrack1);
 		SharedMemory->Track1Used = 0;
 		V(MutexTrack1);
@@ -167,13 +182,92 @@ void takeOffOrLanding()
 		SharedMemory->Track2Used = 1;
 		V(MutexTrack2);
 		if (LocalPlaneInformation.fromorto == 1)
-			printf("Avion n°%d : atterissage piste 2\n",LocalPlaneInformation.num);
+			printf("Avion n°%d : Piste 2 : atterissage\n",LocalPlaneInformation.num);
 		else
-			printf("Avion n°%d : décollage piste 2\n",LocalPlaneInformation.num);
-		sleep((rand()%5)+5);
+			printf("Avion n°%d : Piste 2 : décollage\n",LocalPlaneInformation.num);
+		sleep(randompart(PlaneTakeOfOrLandingDelay));
 		P(MutexTrack2);
 		SharedMemory->Track2Used = 0;
-		printf("Avion n°%d a libéré la piste 2\n",LocalPlaneInformation.num);
+		printf("Avion n°%d : Piste 2 : libérée \n",LocalPlaneInformation.num);
 		V(MutexTrack2);
+	}
+}
+
+void refreshOperatingMode()
+{
+	//Actualisation du mode de fonctionnement de l'Avion en fonction du carburant restant
+	if( LocalPlaneInformation.fuellvl < PlaneFuelUrgentThreshold+1 && LocalFlightInformation.operatingmode == 1)
+	{
+		printf("Avion n°%d : En attente piste %d : Passage en Mode Urgent\n",LocalFlightInformation.tracknumber,LocalPlaneInformation.num);
+		LocalFlightInformation.operatingmode = 2;
+
+		//Envoi du signal pour un avion assuré et utilisation de la mémoire partagée pour que la tour de contrôle récupère le numéro de piste de l'avion envoyant le signal
+		if(LocalFlightInformation.tracknumber == 1)
+		{
+			P(MutexPlaneSignal);
+
+			//Attente au cas où un avion vient déjà d'envoyer un signal
+			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
+			{
+				V(MutexPlaneSignal);
+				sleep(1);
+				P(MutexPlaneSignal);
+			}
+
+			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
+			V(MutexPlaneSignal);
+			kill(pid,SIGUSR2);
+		}
+		else
+		{
+			P(MutexPlaneSignal);
+
+			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
+			{
+				V(MutexPlaneSignal);
+				sleep(1);
+				P(MutexPlaneSignal);
+			}
+
+			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
+			V(MutexPlaneSignal);
+			kill(pid,SIGUSR2);
+		}
+	}
+	else if( LocalPlaneInformation.fuellvl < PlaneFuelInsuredThreshold+1 && LocalFlightInformation.operatingmode == 0)
+	{
+		printf("Avion n°%d : En attente piste %d : Passage en Mode Assuré\n",LocalPlaneInformation.num,LocalFlightInformation.tracknumber);
+		LocalFlightInformation.operatingmode = 1;
+
+		if(LocalFlightInformation.tracknumber == 1)
+		{
+			P(MutexPlaneSignal);
+
+			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
+			{
+				V(MutexPlaneSignal);
+				sleep(1);
+				P(MutexPlaneSignal);
+			}
+
+			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
+			V(MutexPlaneSignal);
+			kill(pid,SIGUSR1);
+		}
+		else
+		{
+			P(MutexPlaneSignal);
+
+			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
+			{
+				V(MutexPlaneSignal);
+				sleep(1);
+				P(MutexPlaneSignal);
+			}
+			
+			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
+			V(MutexPlaneSignal);
+			kill(pid,SIGUSR1);
+		}
 	}
 }
