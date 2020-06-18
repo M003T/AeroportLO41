@@ -14,5 +14,6 @@ void * plane (void *);
 void takeOffOrLanding();
 void testtimetogo();
 void refreshOperatingMode();
+void checkDelay();
 
 #endif

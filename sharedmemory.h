@@ -8,7 +8,8 @@ typedef struct {
 	int NbPlaneAwaitingInformation;
 	int NbPlaneAwaitingTrack1;
 	int NbPlaneAwaitingTrack2;
-	int PlanesWaiting;
+	int NbPlaneGoingTrack1;
+	int NbPlaneGoingTrack2;
 	bool Track1Used;
 	bool Track2Used;
 	int TrackNumberPlaneThatSentSignal;

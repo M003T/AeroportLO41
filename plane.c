@@ -49,6 +49,8 @@ void * plane (void * arg)
 	testtimetogo();
 
 	takeOffOrLanding();
+
+	checkDelay();
 	
 	pthread_exit(NULL);
 }
@@ -108,10 +110,19 @@ void receiveFlightInformation()
 
 void testtimetogo()
 {
-	P(MutexPlanesWaiting);
-	SharedMemory->PlanesWaiting++;
-	V(MutexPlanesWaiting);
-
+	if(LocalFlightInformation.tracknumber == 1)
+	{
+		P(MutexTrack1);
+		SharedMemory->NbPlaneGoingTrack1++;
+		V(MutexTrack1);
+	}
+	else
+	{
+		P(MutexTrack2);
+		SharedMemory->NbPlaneGoingTrack2++;
+		V(MutexTrack2);
+	}
+	
 	time_t timestruct = time(NULL);
 	struct tm actualtime = *localtime( &timestruct );
 	//Tant que l'heure actuelle est différent de l'heure de décollage, ou que la minute actuelle est inférieure à la minute de décollage, ou que le mode de l'avion reste normal ou assuré, on attend, et le carburant diminue durant l'attente
@@ -121,11 +132,21 @@ void testtimetogo()
 		timestruct = time(NULL);
 		actualtime = *localtime( &timestruct );
 		LocalPlaneInformation.fuellvl--;
+		refreshOperatingMode();
 	}
 	
-	P(MutexPlanesWaiting);
-	SharedMemory->PlanesWaiting--;
-	V(MutexPlanesWaiting);
+	if(LocalFlightInformation.tracknumber == 1)
+	{
+		P(MutexTrack1);
+		SharedMemory->NbPlaneGoingTrack1--;
+		V(MutexTrack1);
+	}
+	else
+	{
+		P(MutexTrack2);
+		SharedMemory->NbPlaneGoingTrack2--;
+		V(MutexTrack2);
+	}
 }
 
 void takeOffOrLanding()
@@ -198,76 +219,62 @@ void refreshOperatingMode()
 	//Actualisation du mode de fonctionnement de l'Avion en fonction du carburant restant
 	if( LocalPlaneInformation.fuellvl < PlaneFuelUrgentThreshold+1 && LocalFlightInformation.operatingmode == 1)
 	{
-		printf("Avion n°%d : En attente piste %d : Passage en Mode Urgent\n",LocalFlightInformation.tracknumber,LocalPlaneInformation.num);
+		printf("Avion n°%d : En attente piste %d : Passage en Mode Urgent\n",LocalPlaneInformation.num,LocalFlightInformation.tracknumber);
 		LocalFlightInformation.operatingmode = 2;
 
-		//Envoi du signal pour un avion assuré et utilisation de la mémoire partagée pour que la tour de contrôle récupère le numéro de piste de l'avion envoyant le signal
-		if(LocalFlightInformation.tracknumber == 1)
+		//Envoi du signal pour un avion en mode assuré et utilisation de la mémoire partagée pour que la tour de contrôle récupère le numéro de piste de l'avion envoyant le signal
+		P(MutexPlaneSignal);
+
+		//Attente au cas où un avion vient déjà d'envoyer un signal
+		while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
 		{
-			P(MutexPlaneSignal);
-
-			//Attente au cas où un avion vient déjà d'envoyer un signal
-			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
-			{
-				V(MutexPlaneSignal);
-				sleep(1);
-				P(MutexPlaneSignal);
-			}
-
-			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
 			V(MutexPlaneSignal);
-			kill(pid,SIGUSR2);
-		}
-		else
-		{
+			sleep(1);
 			P(MutexPlaneSignal);
-
-			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
-			{
-				V(MutexPlaneSignal);
-				sleep(1);
-				P(MutexPlaneSignal);
-			}
-
-			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
-			V(MutexPlaneSignal);
-			kill(pid,SIGUSR2);
 		}
+
+		SharedMemory->TrackNumberPlaneThatSentSignal = LocalFlightInformation.tracknumber;
+		V(MutexPlaneSignal);
+		kill(pid,SIGUSR2);
+		
 	}
 	else if( LocalPlaneInformation.fuellvl < PlaneFuelInsuredThreshold+1 && LocalFlightInformation.operatingmode == 0)
 	{
 		printf("Avion n°%d : En attente piste %d : Passage en Mode Assuré\n",LocalPlaneInformation.num,LocalFlightInformation.tracknumber);
 		LocalFlightInformation.operatingmode = 1;
 
-		if(LocalFlightInformation.tracknumber == 1)
+		P(MutexPlaneSignal);
+
+		while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
 		{
-			P(MutexPlaneSignal);
-
-			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
-			{
-				V(MutexPlaneSignal);
-				sleep(1);
-				P(MutexPlaneSignal);
-			}
-
-			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
 			V(MutexPlaneSignal);
-			kill(pid,SIGUSR1);
-		}
-		else
-		{
+			sleep(1);
 			P(MutexPlaneSignal);
-
-			while(SharedMemory->TrackNumberPlaneThatSentSignal != 0)
-			{
-				V(MutexPlaneSignal);
-				sleep(1);
-				P(MutexPlaneSignal);
-			}
-			
-			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
-			V(MutexPlaneSignal);
-			kill(pid,SIGUSR1);
 		}
+
+		SharedMemory->TrackNumberPlaneThatSentSignal = LocalFlightInformation.tracknumber;
+		V(MutexPlaneSignal);
+		kill(pid,SIGUSR1);
+	}
+}
+
+void checkDelay()
+{
+	time_t timestruct = time(NULL);
+	struct tm actualtime = *localtime( &timestruct );
+
+	if ( (LocalFlightInformation.takeofforlandinghour.tm_min + LocalFlightInformation.maxdelay) >=60 )
+	{
+		LocalFlightInformation.takeofforlandinghour.tm_hour++;
+		LocalFlightInformation.takeofforlandinghour.tm_min = LocalFlightInformation.takeofforlandinghour.tm_min + LocalFlightInformation.maxdelay - 60;
+	}
+	else
+	{
+		LocalFlightInformation.takeofforlandinghour.tm_min = LocalFlightInformation.takeofforlandinghour.tm_min + LocalFlightInformation.maxdelay;
+	}
+
+	if ( (LocalFlightInformation.takeofforlandinghour.tm_hour == actualtime.tm_hour) && (actualtime.tm_min > LocalFlightInformation.takeofforlandinghour.tm_min) )
+	{
+		printf("Avion n°%d : Alerte : Le délai max a été dépassé de %d min\n",LocalPlaneInformation.num,(actualtime.tm_min-LocalFlightInformation.takeofforlandinghour.tm_min));
 	}
 }

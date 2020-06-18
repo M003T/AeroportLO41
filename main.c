@@ -79,7 +79,8 @@ int main(int argc, char *argv[])
 	SharedMemory->NbPlaneAwaitingTrack2 = 0;
 	SharedMemory->Track1Used = 0;
 	SharedMemory->Track2Used = 0;
-	SharedMemory->PlanesWaiting = 0;
+	SharedMemory->NbPlaneGoingTrack1=0;
+	SharedMemory->NbPlaneGoingTrack2=0;
 	SharedMemory->TrackNumberPlaneThatSentSignal = 0;
 
 	//Réecriture signal Ctrl-C pour que les objets IPC soient correctement supprimés en cas d'arrêt prématuré, en laissant le programme se terminer normalement sans rajouter de nouveaux avions

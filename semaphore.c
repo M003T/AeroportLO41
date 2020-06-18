@@ -35,8 +35,8 @@ void initsem()
 		struct semid_ds *stat;
 		short * array;
 	} ctl_arg;
-    if ((sem_id = semget(KEY, 10, IFLAGS)) > 0) {
-	    	short array[10] = {0,0,0,1,1,1,1,1,1,1};
+    if ((sem_id = semget(KEY, 9, IFLAGS)) > 0) {
+	    	short array[9] = {0,0,0,1,1,1,1,1,1};
 	    	ctl_arg.array = array;
 	    	status = semctl(sem_id, 0, SETALL, ctl_arg);
     }

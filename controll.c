@@ -32,13 +32,11 @@ void controll ()
 	P(MutexNbPlaneAwaitingInformation);
 	P(MutexTrack1);
 	P(MutexTrack2);
-	P(MutexPlanesWaiting);
-	while ((SharedMemory->exitrequested == 0) || (SharedMemory->NbPlaneAwaitingInformation > 0) || (SharedMemory->NbPlaneAwaitingTrack1 > 0) || (SharedMemory->NbPlaneAwaitingTrack2 > 0) || (SharedMemory->Track1Used == 1) || (SharedMemory->Track2Used == 1) || (SharedMemory->PlanesWaiting > 0))
+	while ((SharedMemory->exitrequested == 0) || (SharedMemory->NbPlaneAwaitingInformation > 0) || (SharedMemory->NbPlaneAwaitingTrack1 > 0) || (SharedMemory->NbPlaneAwaitingTrack2 > 0) || (SharedMemory->Track1Used == 1) || (SharedMemory->Track2Used == 1) || (SharedMemory->NbPlaneGoingTrack1 > 0) || (SharedMemory->NbPlaneGoingTrack2 > 0))
 	{	
 		V(MutexNbPlaneAwaitingInformation);
 		V(MutexTrack1);
 		V(MutexTrack2);
-		V(MutexPlanesWaiting);
 
 		//Si avions attendent information alors on leur envoie
 		testPlaneAwaitingInformation();
@@ -59,12 +57,10 @@ void controll ()
 		P(MutexNbPlaneAwaitingInformation);
 		P(MutexTrack1);
 		P(MutexTrack2);
-		P(MutexPlanesWaiting);
 	}
 	V(MutexNbPlaneAwaitingInformation);
 	V(MutexTrack1);
 	V(MutexTrack2);
-	V(MutexPlanesWaiting);
 }
 
 void receivePlaneInformation ()
@@ -104,8 +100,11 @@ void generateFlightInformation ()
 		P(MutexTrack1);
 		P(MutexTrack2);
 		//Si la petite piste est en surcharge par rapport à la grande, les avions petit calibre décollent sur la grande
-		if( (SharedMemory->NbPlaneAwaitingTrack1 + ControllNumberBeforeSmallOnTrack1) <= SharedMemory->NbPlaneAwaitingTrack2)
+		if( (SharedMemory->NbPlaneAwaitingTrack1 + SharedMemory->NbPlaneGoingTrack1 + ControllNumberBeforeSmallOnTrack1) <= (SharedMemory->NbPlaneAwaitingTrack2 + SharedMemory->NbPlaneGoingTrack2) )
+		{
 			FlightInformation.tracknumber = 1;
+			printf("Tour de contrôle : Piste 2 : Surcharge, avion petit calibre envoyé vers piste 1\n");
+		}	
 		else
 			FlightInformation.tracknumber = 2;
 		V(MutexTrack1);
@@ -142,15 +141,20 @@ void generateFlightInformation ()
 	time_t mytime = time(NULL);
 	FlightInformation.takeofforlandinghour = *localtime( &mytime );
 	if ( FlightInformation.operatingmode == 0)
+	{
 		addMinutes(2);
+		FlightInformation.maxdelay = 3;
+	}
+	else if( FlightInformation.operatingmode == 1)
+	{
+		addMinutes(1);
+		FlightInformation.maxdelay = 2;
+	}
 	else
 	{
-		if( FlightInformation.operatingmode == 1)
-			addMinutes(1);
 		//Sinon en mode urgent (2) l'heure reste l'heure actuelle, c'est à dire départ immédiat
+		FlightInformation.maxdelay = 1;
 	}
-	
-	FlightInformation.maxdelay = ( rand()%3 ) + 1;
 }
 
 void addMinutes (int minutestoadd)
@@ -197,11 +201,11 @@ void printFlightInformation()
 		printf(" à %d:%d, délai max %d min",FlightInformation.takeofforlandinghour.tm_hour,FlightInformation.takeofforlandinghour.tm_min,FlightInformation.maxdelay);
 
 	if (FlightInformation.operatingmode == 0)
-		printf(" en mode Normal\n");
+		printf(", avion en mode Normal\n");
 	if (FlightInformation.operatingmode == 1)
-		printf(" en mode Assuré\n");
+		printf(", avion en mode Assuré\n");
 	if (FlightInformation.operatingmode == 2)
-		printf(" en mode Urgent\n");
+		printf(", avion en mode Urgent\n");
 }
 
 void testPlaneAwaitingInformation()
@@ -316,41 +320,19 @@ void initialMoveBarrier()
 	//Enlevement initial des obstacles en fonction du mode de l'avion généré et de sa piste
 	if( FlightInformation.operatingmode == 2 )
 	{
-		if(FlightInformation.tracknumber == 1)
-		{
-			P(MutexPlaneSignal);
-			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
-			V(MutexPlaneSignal);
+		P(MutexPlaneSignal);
+		SharedMemory->TrackNumberPlaneThatSentSignal = FlightInformation.tracknumber;
+		V(MutexPlaneSignal);
 
-			traitantSIGUSR2(12);
-		}
-		else
-		{
-			P(MutexPlaneSignal);
-			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
-			V(MutexPlaneSignal);
-
-			traitantSIGUSR2(12);
-		}
+		traitantSIGUSR2(12);
 	}
 	else if( FlightInformation.operatingmode == 1 )
 	{
-		if(FlightInformation.tracknumber == 1)
-		{
-			P(MutexPlaneSignal);
-			SharedMemory->TrackNumberPlaneThatSentSignal = 1;
-			V(MutexPlaneSignal);
+		P(MutexPlaneSignal);
+		SharedMemory->TrackNumberPlaneThatSentSignal = FlightInformation.tracknumber;
+		V(MutexPlaneSignal);
 
-			traitantSIGUSR1(10);
-		}
-		else
-		{
-			P(MutexPlaneSignal);
-			SharedMemory->TrackNumberPlaneThatSentSignal = 2;
-			V(MutexPlaneSignal);
-
-			traitantSIGUSR1(10);
-		}
+		traitantSIGUSR1(10);
 	}
 }
 
