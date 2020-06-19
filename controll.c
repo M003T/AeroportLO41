@@ -24,14 +24,18 @@ int barrier2count;
 
 void controll ()
 {
+	//Les signaux sont reliés à leur traitant pour que les barrières soient enlevées quand les signaux envoyés par les avions passant en mode Assuré ou Urgent sont reçu
 	signal(SIGUSR1, traitantSIGUSR1);
 	signal(SIGUSR2, traitantSIGUSR2);
+
 	barrier1count = 0;
 	barrier2count = 0;
+
 	//Sémaphores Mutex d'accès aux variables monitrice afin que le programme ne s'arrête pas tant que des avions sont encore présent
 	P(MutexNbPlaneAwaitingInformation);
 	P(MutexTrack1);
 	P(MutexTrack2);
+	//La boucle de la tour de contrôle continue tant que l'exit n'est pas requested ET tant que des avions sont encore présents pour éviter de laisser des threads bloqués en attente
 	while ((SharedMemory->exitrequested == 0) || (SharedMemory->NbPlaneAwaitingInformation > 0) || (SharedMemory->NbPlaneAwaitingTrack1 > 0) || (SharedMemory->NbPlaneAwaitingTrack2 > 0) || (SharedMemory->Track1Used == 1) || (SharedMemory->Track2Used == 1) || (SharedMemory->NbPlaneGoingTrack1 > 0) || (SharedMemory->NbPlaneGoingTrack2 > 0))
 	{	
 		V(MutexNbPlaneAwaitingInformation);
@@ -138,7 +142,7 @@ void generateFlightInformation ()
 		else
 			FlightInformation.operatingmode = 0;
 	}
-	//Création de l'heure de départ en fonction du mode de fonctionnement de l'avion
+	//Création de l'heure de départ et du délai max en fonction du mode de fonctionnement de l'avion
 	time_t mytime = time(NULL);
 	FlightInformation.takeofforlandinghour = *localtime( &mytime );
 	if ( FlightInformation.operatingmode == 0)
@@ -153,7 +157,7 @@ void generateFlightInformation ()
 	}
 	else
 	{
-		//Sinon en mode urgent (2) l'heure reste l'heure actuelle, c'est à dire départ immédiat
+		//Sinon en mode urgent (2) l'heure de départ reste l'heure actuelle, c'est à dire départ immédiat
 		FlightInformation.maxdelay = 1;
 	}
 }
@@ -211,6 +215,7 @@ void printFlightInformation()
 
 void testPlaneAwaitingInformation()
 {
+	//Cette fonction correspond à tout la boucle correspondant à l'envoi d'un message depuis l'avion puis à son message retour : si un avion est actuellement en attente pour envoyer des informations, alors on le débloque, on les reçoit, les affiche puis on génère les information de retour qu'on affiche puis envoie, avant d'utiliser initialMoveBarrier pour enlever les obstacles si l'avion qui vient d'être crée est en mode Assuré ou Urgent
 	P(MutexNbPlaneAwaitingInformation);
 	if(SharedMemory->NbPlaneAwaitingInformation > 0)
 	{
@@ -229,6 +234,7 @@ void testPlaneAwaitingInformation()
 
 void testTrack1()
 {
+	//Si un avion attend la piste 1 et que cette derniere est libre, alors on le débloque
 	P(MutexTrack1);
 	if(SharedMemory->NbPlaneAwaitingTrack1 > 0 && SharedMemory->Track1Used == 0 )
 	{
@@ -242,6 +248,7 @@ void testTrack1()
 
 void testTrack2()
 {
+	//Si un avion attend la piste 2 et que cette derniere est libre, alors on le débloque
 	P(MutexTrack2);
 	if(SharedMemory->NbPlaneAwaitingTrack2 > 0 && SharedMemory->Track2Used == 0 )
 	{
@@ -255,11 +262,12 @@ void testTrack2()
 
 void randomBarrier(int tracknumber)
 {
+	//Cette fonction tente de générer alétoirement un obstacle sur une des 2 pistes à chaque passage de la boucle
 	if(tracknumber == 1)
 	{	
 		P(MutexBarrier1);
 		P(MutexTrack1);
-		//Si il n'y a pas déjà un obstacle et que la piste est vide
+		//Si il n'y a pas déjà un obstacle et que la piste est vide alors ->
 		if(barrier1count == 0 && SharedMemory->Track1Used == 0)
 		{
 			//1 chance sur X d'avoir un obstacle sur la piste
@@ -337,7 +345,7 @@ void initialMoveBarrier()
 	}
 }
 
-void traitantSIGUSR1(int num) //Signal envoyé par un avion de la piste 1 passant en mode Assuré
+void traitantSIGUSR1(int num) //Signal envoyé par un avion passant en mode Assuré, sa piste est passée via la structure SharedMemory et protégée par des variables Mutex, obligé car SIGUSR est limité à 2 impossible d'en créer 4 différents sans réecrire les signaux système
 {
 	if (num!=SIGUSR1)
 	{
@@ -353,7 +361,7 @@ void traitantSIGUSR1(int num) //Signal envoyé par un avion de la piste 1 passan
 			V(MutexPlaneSignal);
 
 			P(MutexBarrier1);
-			//Diminution du temps de l'obstacle
+			//Si il y'a un obstacle avec un temps minimum restant, alors on diminue ce temps
 			if (barrier1count > ControllBarrierDelayReduceWhenInsuredPlane)
 			{
 				barrier1count = barrier1count - ControllBarrierDelayReduceWhenInsuredPlane;
@@ -363,6 +371,7 @@ void traitantSIGUSR1(int num) //Signal envoyé par un avion de la piste 1 passan
 		}
 		else if(SharedMemory->TrackNumberPlaneThatSentSignal == 2)
 		{
+			//Pareil pour la piste 2
 			SharedMemory->TrackNumberPlaneThatSentSignal = 0;
 			V(MutexPlaneSignal);
 
@@ -377,7 +386,7 @@ void traitantSIGUSR1(int num) //Signal envoyé par un avion de la piste 1 passan
 	}
 }
 
-void traitantSIGUSR2(int num) //Signal envoyé par un avion de la piste 2 passant en mode Assuré
+void traitantSIGUSR2(int num) //Signal envoyé par un avion passant en mode Urgent
 {
 	if (num!=SIGUSR2)
 	{
@@ -393,7 +402,7 @@ void traitantSIGUSR2(int num) //Signal envoyé par un avion de la piste 2 passan
 			V(MutexPlaneSignal);
 
 			P(MutexBarrier1);
-			//Obstacle enlevé instantanément si présent
+			//Si un obstacle est présent alors son compteur est amené directement à 1 et il sera donc enlevé par l'équipe au prochain tour de boucle
 			if (barrier1count > 0)
 			{
 				barrier1count = 1;
@@ -403,6 +412,7 @@ void traitantSIGUSR2(int num) //Signal envoyé par un avion de la piste 2 passan
 		}
 		else if(SharedMemory->TrackNumberPlaneThatSentSignal == 2)
 		{
+			//Pareil pour la piste 2
 			SharedMemory->TrackNumberPlaneThatSentSignal = 0;
 			V(MutexPlaneSignal);
 

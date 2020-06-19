@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 	{
 		controll();
 
-		//Détachement mémoire partagée et exit
+		//Détachement mémoire partagée et exit à la fin du processus fils
 		removeshm((void *) SharedMemory);
 		exit(0);
 	}
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
     		i++;
 		}
 		
-		//Fermeture Threads, puis processus fils et enfin détachement mémoire partagée et suppression objets IPC 
+		//Une fois fini, fermeture Threads, puis processus fils et enfin détachement mémoire partagée et suppression objets IPC 
 		for (int j=0;j<i;j++)
 			pthread_join(thr[j],NULL);
 
