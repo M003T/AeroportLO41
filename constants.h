@@ -8,7 +8,7 @@
 #define PlaneTakeOfOrLandingDelay 20 // Default 20, has randompart
 
 #define PlaneFuelLvlRange 30 //Default 30
-#define PlaneFuelInsuredThreshold 15 //Default 10
+#define PlaneFuelInsuredThreshold 15 //Default 15
 #define PlaneFuelUrgentThreshold 5 //Default 5
 
 #define PlaneLoseFuelDelay 10 //Default 10
